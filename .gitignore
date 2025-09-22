@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+server/keys/*.json
+server/logs/
+.DS_Store
+.vscode/
+.idea/
+*.log
+server/*.env
+*/*env/*env*
