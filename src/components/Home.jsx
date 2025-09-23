@@ -12,7 +12,11 @@ export default function Home({ onStart, user, onLogout }) {
                     {user ? (
                         <Button variant="ghost" onClick={onLogout}>Logout</Button>
                     ) : (
-                        <Button variant="ghost" onClick={() => onStart('login')}>Login</Button>
+                        <>
+                            <Button variant="ghost" onClick={() => onStart('login')}>Login</Button>
+                            {/* Explicit Register button so it appears on desktop */}
+                            <Button className="ml-2" onClick={() => onStart('register')}>Register</Button>
+                        </>
                     )}
                 </Navbar>
 
@@ -32,7 +36,10 @@ export default function Home({ onStart, user, onLogout }) {
                                     {user ? (
                                         <Button variant="ghost" onClick={onLogout}>Logout</Button>
                                     ) : (
-                                        <Button variant="ghost" onClick={() => onStart('login')}>Login</Button>
+                                        <>
+                                            <Button variant="ghost" onClick={() => onStart('login')}>Login</Button>
+                                            <Button variant="ghost" onClick={() => onStart('register')}>Register</Button>
+                                        </>
                                     )}
                                 </div>
                             </div>

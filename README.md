@@ -34,6 +34,10 @@ Notlar
 - Sunucu klasörü içinde WebRTC peer olmak için native `wrtc` modülü gerekebilir (platforma bağlı derleme/ikili dosya gereksinimleri olabilir). `server/README.md` içinde daha fazla ayrıntı ve Docker talimatları yer almaktadır.
 - Bu proje öğrenme ve prototipleme amaçlıdır; üretime almadan önce kimlik doğrulama, güvenlik ve hata yönetimi kontrolleri ekleyin.
 
+Fixes
+
+- Ensure Register button visible on Home: added explicit Register buttons to the navbar and quick-start card so "Sign up" is accessible on desktop and mobile.
+
 ## Running with Docker
 
 If you want to run the backend and MongoDB using Docker Compose, a `docker-compose.yml` is included at the repository root. It builds the server image from `./server/Dockerfile` and starts a MongoDB service.

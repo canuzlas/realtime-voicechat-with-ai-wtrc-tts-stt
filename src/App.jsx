@@ -1,12 +1,13 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react'
 const LoginForm = lazy(() => import('./components/LoginForm'))
+const RegisterForm = lazy(() => import('./components/RegisterForm'))
 const ChatPage = lazy(() => import('./components/ChatPage'))
 const Home = lazy(() => import('./components/Home'))
 import { Background, Skeleton } from './react-bits'
 
 export default function App() {
     const [user, setUser] = useState(null)
-    const [page, setPage] = useState('home') // home | login | chat
+    const [page, setPage] = useState('home') // home | login | chat | register
 
     function parseToken(token) {
         try {
@@ -35,6 +36,15 @@ export default function App() {
                         onLogin={(u) => {
                             setUser(u)
                             setPage('chat')
+                        }}
+                        onBack={() => setPage('home')}
+                    />
+                )}
+                {page === 'register' && !user && (
+                    <RegisterForm
+                        onRegistered={() => {
+                            // after successful registration, go to login page
+                            setPage('login')
                         }}
                         onBack={() => setPage('home')}
                     />
