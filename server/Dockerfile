@@ -29,11 +29,13 @@ COPY package.json package-lock.json* ./
 RUN npm install -g node-gyp node-pre-gyp
 RUN npm install --no-audit --no-fund
 
+
+
 # Copy application source
 COPY . .
 
-# Expose port used by the server (default 4000)
-EXPOSE 4000
+# Expose port used by the server (default 3000)
+EXPOSE 3000
 
 ENV NODE_ENV=production
 
@@ -41,5 +43,5 @@ ENV NODE_ENV=production
 CMD ["npm", "start"]
 
 # Command to run the container with environment variables from .env file
-# docker run -p 4000:4000 --env-file ./server/.env chat-server
+# docker run -p 3000:3000 --env-file ./server/.env chat-server
 

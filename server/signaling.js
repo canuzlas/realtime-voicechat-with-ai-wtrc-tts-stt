@@ -59,7 +59,7 @@ module.exports = function (io) {
             try {
                 const fetch = require('node-fetch')
                 const jwt = require('jsonwebtoken')
-                const apiUrl = `http://127.0.0.1:${process.env.PORT || 4000}`
+                const apiUrl = `http://127.0.0.1:${process.env.PORT || 3000}`
                 // create a short-lived internal token so verifyJWT accepts this internal call
                 const token = jwt.sign({ sub: 'internal', iss: 'server' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '1h' })
                 const res = await fetch(`${apiUrl}/chat/tts`, {
@@ -109,7 +109,7 @@ module.exports = function (io) {
                 const jwt = require('jsonwebtoken')
                 const form = new FormData()
                 form.append('audio', fs.createReadStream(fname))
-                const apiUrl = `http://127.0.0.1:${process.env.PORT || 4000}`
+                const apiUrl = `http://127.0.0.1:${process.env.PORT || 3000}`
                 // create internal token so the verifyJWT middleware accepts this internal call
                 const token = jwt.sign({ sub: 'internal', iss: 'server' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '1h' })
                 const headers = Object.assign({ Authorization: `Bearer ${token}` }, (form.getHeaders ? form.getHeaders() : {}))

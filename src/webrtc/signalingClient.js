@@ -2,7 +2,7 @@
 // Usage: import createSignaler from './webrtc/signalingClient'
 // const { socket, createOffer, handleOffer } = createSignaler({ room: 'test-room' })
 
-export default function createSignaler({ url = (import.meta.env.VITE_API_URL || 'http://localhost:4000'), room }) {
+export default function createSignaler({ url = (import.meta.env.VITE_API_URL || 'http://localhost:3000'), room }) {
     // lazy load socket.io-client to avoid bundling in node-only contexts
     // import('socket.io-client') returns a promise
     let socket = null

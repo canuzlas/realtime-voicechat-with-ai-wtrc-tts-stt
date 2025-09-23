@@ -1,7 +1,7 @@
 const io = require('socket.io-client')
 const fs = require('fs')
 
-const SERVER = process.env.SIO_URL || 'http://127.0.0.1:4000'
+const SERVER = process.env.SIO_URL || 'http://127.0.0.1:3000'
 const ROOM = 'smoke-room-' + Math.random().toString(36).slice(2, 8)
 
 function wait(ms) { return new Promise(r => setTimeout(r, ms)) }

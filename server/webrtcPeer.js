@@ -74,7 +74,7 @@ async function createPeer({ socket, offer }) {
 
         // We'll synthesize MP3 via Google TTS if available by calling /chat/tts endpoint locally.
         // Use a local HTTP POST to the app server to reuse existing TTS logic.
-        const apiUrl = `http://127.0.0.1:${process.env.PORT || 4000}`
+        const apiUrl = `http://127.0.0.1:${process.env.PORT || 3000}`
         try {
             const fetch = require('node-fetch')
             const res = await fetch(`${apiUrl}/chat/tts`, {

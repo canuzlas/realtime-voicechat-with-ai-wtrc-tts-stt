@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react'
-import LoginForm from './components/LoginForm'
-import ChatPage from './components/ChatPage'
+import React, { useState, useEffect, Suspense, lazy } from 'react'
+const LoginForm = lazy(() => import('./components/LoginForm'))
+const ChatPage = lazy(() => import('./components/ChatPage'))
+const Home = lazy(() => import('./components/Home'))
+import { Background, Skeleton } from './react-bits'
 
 export default function App() {
     const [user, setUser] = useState(null)
+    const [page, setPage] = useState('home') // home | login | chat
 
     function parseToken(token) {
         try {
@@ -24,18 +27,34 @@ export default function App() {
     }, [])
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-            {!user ? (
-                <LoginForm onLogin={(u) => setUser(u)} />
-            ) : (
-                <ChatPage
-                    user={user}
-                    onLogout={() => {
-                        localStorage.removeItem('auth_token')
-                        setUser(null)
-                    }}
-                />
-            )}
-        </div>
+        <Background variant={user ? 'soft' : 'vivid'}>
+            <Suspense fallback={<div className="w-full max-w-3xl p-6"><Skeleton className="h-8 mb-4" /><Skeleton className="h-64" /></div>}>
+                {page === 'home' && <Home onStart={(p) => setPage(p)} user={user} onLogout={() => { localStorage.removeItem('auth_token'); setUser(null); setPage('home') }} />}
+                {page === 'login' && !user && (
+                    <LoginForm
+                        onLogin={(u) => {
+                            setUser(u)
+                            setPage('chat')
+                        }}
+                        onBack={() => setPage('home')}
+                    />
+                )}
+                {page === 'chat' && (
+                    user ? (
+                        <ChatPage
+                            user={user}
+                            onLogout={() => {
+                                localStorage.removeItem('auth_token')
+                                setUser(null)
+                                setPage('home')
+                            }}
+                        />
+                    ) : (
+                        // If user is not authenticated, redirect to login
+                        setPage('login') && null
+                    )
+                )}
+            </Suspense>
+        </Background>
     )
 }

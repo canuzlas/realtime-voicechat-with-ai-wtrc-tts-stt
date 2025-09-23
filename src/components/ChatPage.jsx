@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import createSignaler from '../webrtc/signalingClient'
+import { Card, Textarea, Button, Avatar, IconButton } from '../react-bits'
 
 export default function ChatPage({ user, onLogout }) {
     const [messages, setMessages] = useState([
@@ -10,6 +11,7 @@ export default function ChatPage({ user, onLogout }) {
     const listRef = useRef(null)
     const audioRef = useRef(null)
     const audioUrlRef = useRef(null)
+    const typingTimersRef = useRef({})
     const [recording, setRecording] = useState(false)
     const [webrtcActive, setWebrtcActive] = useState(false)
     const mediaRecorderRef = useRef(null)
@@ -23,11 +25,28 @@ export default function ChatPage({ user, onLogout }) {
     const sioSocketRef = useRef(null)
 
     useEffect(() => {
-        // scroll to bottom when messages change
+        // smooth scroll to bottom when messages change
         if (listRef.current) {
-            listRef.current.scrollTop = listRef.current.scrollHeight
+            // wait for DOM update/layout
+            requestAnimationFrame(() => {
+                try {
+                    listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+                } catch (e) {
+                    listRef.current.scrollTop = listRef.current.scrollHeight
+                }
+            })
         }
     }, [messages])
+
+    useEffect(() => {
+        return () => {
+            // cleanup any typing timers on unmount
+            try {
+                Object.values(typingTimersRef.current || {}).forEach((t) => clearInterval(t))
+                typingTimersRef.current = {}
+            } catch (e) { }
+        }
+    }, [])
 
     async function sendMessage() {
         if (!input.trim()) return
@@ -44,7 +63,7 @@ export default function ChatPage({ user, onLogout }) {
         setSending(true)
         const token = localStorage.getItem('auth_token')
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
             const res = await fetch(`${API_URL}/chat/message`, {
                 method: 'POST',
                 headers: {
@@ -56,8 +75,12 @@ export default function ChatPage({ user, onLogout }) {
 
             if (!res.ok) throw new Error('server error')
             const data = await res.json()
-            const botMsg = { id: Date.now() + 1, from: 'bot', text: data.reply || '(no reply)' }
+            const full = data.reply || '(no reply)'
+            const botId = Date.now() + 1
+            const botMsg = { id: botId, from: 'bot', text: full, fullText: full, typedText: '', typing: true }
             setMessages((m) => [...m, botMsg])
+            // start typing animation
+            startTypingAnimation(botId, full)
             // After receiving bot reply, request TTS and play audio (best-effort)
             // If opts.skipTts is true we assume the realtime path will stream TTS back
             // via socket/datachannel and we should not fetch and play HTTP TTS to avoid duplicates.
@@ -90,8 +113,11 @@ export default function ChatPage({ user, onLogout }) {
                 }
             }
         } catch (err) {
-            const botMsg = { id: Date.now() + 1, from: 'bot', text: `Error: ${err.message}. (local fallback)` }
+            const full = `Error: ${err.message}. (local fallback)`
+            const botId = Date.now() + 1
+            const botMsg = { id: botId, from: 'bot', text: full, fullText: full, typedText: '', typing: true }
             setMessages((m) => [...m, botMsg])
+            startTypingAnimation(botId, full)
         } finally {
             setSending(false)
         }
@@ -141,7 +167,117 @@ export default function ChatPage({ user, onLogout }) {
             // stop handler: finalize audio stream and wait for transcript
             mr.onstop = async () => {
                 const token = localStorage.getItem('auth_token')
-                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+                // If socket.io not connected, it should already be created by ondataavailable, but ensure handlers exist
+                if (!sioSocketRef.current) {
+                    const sig = createSignaler({ url: API_URL, room: null })
+                    await sig.connect()
+                    sioSocketRef.current = sig
+                    setupSocketHandlers(sig)
+                }
+
+                // stream recorded chunks to server via socket.io
+                try {
+                    for (const blobPart of recordedChunksRef.current) {
+                        // read as arrayBuffer
+                        const ab = await blobPart.arrayBuffer()
+                        sioSocketRef.current.sendIce // noop to ensure object exists
+                        // socket.io client wrapper expects to use .emit but our signaling helper uses socket.emit under the hood
+                        // send binary chunk
+                        // use the helper's internal socket by calling its sendOffer/sendIce methods isn't applicable; instead we attach a raw socket
+                        // The signalingClient returns an object that wraps socket.io; we can reach the underlying io by accessing sig.socket
+                        // but to keep abstraction, the signaling helper exposes emit via connect returning socket under the hood; use a low-level approach:
+                        // directly emit using the signaler internal socket if present
+                        const sig = sioSocketRef.current
+                        const raw = sig && sig.getSocket && sig.getSocket()
+                        if (raw && raw.emit) raw.emit('stream-audio', ab)
+                        else if (sig && sig.send) sig.send(ab)
+                    }
+                    // finalize and ask for STT
+                    const sig = sioSocketRef.current
+                    const raw = sig && sig.getSocket && sig.getSocket()
+                    if (raw && raw.emit) raw.emit('finalize-audio')
+                    else if (sig && sig.finalizeAudio) sig.finalizeAudio()
+                    // listen for transcript
+                    // transcript will be delivered via 'stream-audio-final' handler set in setupSocketHandlers
+                    // we just wait a short moment for server to respond; the handler will call processUserText
+                    await new Promise((r) => setTimeout(r, 200))
+                } catch (err) {
+                    console.warn('streaming failed, falling back', err)
+                    // fallback to previous flow: upload to /chat/voice
+                    const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' })
+                    const form = new FormData()
+                    form.append('audio', blob, 'recording.webm')
+                    try {
+                        const res = await fetch(`${API_URL}/chat/voice`, {
+                            method: 'POST',
+                            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                            body: form,
+                        })
+                        if (!res.ok) throw new Error('server error')
+                        const data = await res.json()
+                        const botMsg = { id: Date.now() + 1, from: 'bot', text: data.reply || '(no reply)' }
+                        setMessages((m) => [...m, botMsg])
+                    } catch (err2) {
+                        const botMsg = { id: Date.now() + 1, from: 'bot', text: `Error: ${err2.message}. (local fallback)` }
+                        setMessages((m) => [...m, botMsg])
+                    }
+                }
+            }
+            mr.start()
+            setRecording(true)
+            // setup simple silence detection to auto-finalize while speaking
+            startSilenceDetector(stream)
+        } catch (err) {
+            alert('Could not start recording: ' + err.message)
+        }
+    }
+
+    async function startRecording() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Microphone not supported in this browser')
+            return
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            // ensure webrtc connection is active and send mic track
+            if (!webrtcActive) await startWebrtc(stream)
+            else {
+                // if pc exists, replace tracks
+                const pc = pcRef.current
+                if (pc) {
+                    const senders = pc.getSenders().filter(s => s.track && s.track.kind === 'audio')
+                    if (senders.length) senders.forEach(s => s.replaceTrack(stream.getAudioTracks()[0]))
+                    else pc.addTrack(stream.getAudioTracks()[0], stream)
+                }
+            }
+            recordedChunksRef.current = []
+            const mr = new MediaRecorder(stream)
+            mediaRecorderRef.current = mr
+            // send chunks immediately as they become available so server can transcribe while speaking
+            mr.ondataavailable = async (e) => {
+                try {
+                    if (e.data && e.data.size > 0) {
+                        recordedChunksRef.current.push(e.data)
+                        // ensure socket exists
+                        if (!sioSocketRef.current) {
+                            const sig = createSignaler({ url: API_URL, room: null })
+                            await sig.connect()
+                            sioSocketRef.current = sig
+                            setupSocketHandlers(sig)
+                        }
+                        const sig = sioSocketRef.current
+                        const raw = sig && sig.getSocket && sig.getSocket()
+                        const ab = await e.data.arrayBuffer()
+                        if (raw && raw.emit) raw.emit('stream-audio', ab)
+                    }
+                } catch (err) { console.warn('live chunk send failed', err) }
+            }
+
+            // stop handler: finalize audio stream and wait for transcript
+            mr.onstop = async () => {
+                const token = localStorage.getItem('auth_token')
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
                 // If socket.io not connected, it should already be created by ondataavailable, but ensure handlers exist
                 if (!sioSocketRef.current) {
                     const sig = createSignaler({ url: API_URL, room: null })
@@ -214,6 +350,57 @@ export default function ChatPage({ user, onLogout }) {
         }
         setRecording(false)
         stopSilenceDetector()
+    }
+
+    // Typing animation helper: progressively reveals bot's text
+    function startTypingAnimation(id, fullText) {
+        try {
+            const speed = Math.max(12, Math.min(36, Math.floor(600 / Math.max(1, fullText.length))))
+            let i = 0
+            if (typingTimersRef.current[id]) clearInterval(typingTimersRef.current[id])
+            const timer = setInterval(() => {
+                i++
+                setMessages((prev) => prev.map((msg) => {
+                    if (msg.id !== id) return msg
+                    const nextText = fullText.slice(0, i)
+                    const done = i >= fullText.length
+                    return { ...msg, typedText: nextText, typing: !done, text: done ? fullText : msg.text }
+                }))
+                if (i >= fullText.length) {
+                    clearInterval(timer)
+                    delete typingTimersRef.current[id]
+                }
+            }, speed)
+            typingTimersRef.current[id] = timer
+        } catch (e) { console.warn('typing anim err', e) }
+    }
+
+    // Minimal markdown renderer (safe-ish): supports code blocks and links
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+    }
+
+    function renderMarkdown(raw) {
+        if (!raw) return ''
+        // Escape first
+        let s = escapeHtml(raw)
+        // Code blocks ```lang\n...```
+        s = s.replace(/```(\w+)?\n([\s\S]*?)```/g, (m, lang, code) => {
+            const langClass = lang ? `language-${lang}` : ''
+            return `<pre class="bg-gray-100 dark:bg-slate-800 p-3 rounded text-sm overflow-auto"><code class="${langClass}">${code.replace(/</g, '&lt;')}</code></pre>`
+        })
+        // Inline code `code`
+        s = s.replace(/`([^`]+)`/g, (m, c) => `<code class="bg-slate-100 dark:bg-slate-700 px-1 rounded text-sm">${c}</code>`)
+        // Links
+        s = s.replace(/(https?:\/\/[\w\-./?=&%#]+)/g, '<a class="text-sky-600 dark:text-sky-400 underline" href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+        // Preserve line breaks
+        s = s.replace(/\n/g, '<br/>')
+        return s
     }
 
     // --- Socket handlers and silence detection helpers ---
@@ -297,7 +484,7 @@ export default function ChatPage({ user, onLogout }) {
 
     // WebRTC client setup: create RTCPeerConnection, send mic track, handle incoming tts datachannel
     async function startWebrtc(stream) {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
         const signaler = createSignaler({ url: API_URL, room: null })
         signalerRef.current = signaler
         await signaler.connect()
@@ -424,52 +611,73 @@ export default function ChatPage({ user, onLogout }) {
     }, [])
 
     return (
-        <div className="w-11/12 max-w-3xl bg-white p-6 rounded-lg shadow flex flex-col" style={{ height: '80vh' }}>
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Chat</h2>
-                <div className="flex items-center gap-3">
-                    <span className="text-sm text-slate-600">{user?.email}</span>
-                    <button onClick={onLogout} className="py-1 px-3 bg-gray-100 rounded-md text-sm hover:bg-gray-200">
-                        Logout
-                    </button>
-                </div>
-            </div>
-
-            <div ref={listRef} className="flex-1 overflow-auto border rounded-md p-4 mb-4 space-y-3 bg-slate-50">
-                {messages.map((m) => (
-                    <div key={m.id} className={`max-w-3/4 p-2 rounded ${m.from === 'user' ? 'ml-auto bg-sky-600 text-white' : 'mr-auto bg-white text-slate-800 shadow'}`}>
-                        <div className="text-sm font-medium mb-1">{m.from === 'user' ? 'You' : 'Bot'}</div>
-                        <div className="text-sm whitespace-pre-wrap">{m.text}</div>
+        <div className="min-h-screen flex items-center justify-center bg-transparent">
+            <Card className="w-11/12 max-w-3xl flex flex-col" style={{ height: '80vh' }}>
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <Avatar name={user?.email || 'You'} />
+                        <div>
+                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{user?.email || 'You'}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Online</div>
+                        </div>
                     </div>
-                ))}
-            </div>
-
-            <div className="flex gap-3 items-end">
-                <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type a message..."
-                    className="flex-1 rounded-md border-gray-200 p-2 h-16 resize-none"
-                />
-                <div className="flex flex-col items-center gap-2">
-                    <button
-                        onClick={() => (recording ? stopRecording() : startRecording())}
-                        title={recording ? 'Stop recording' : 'Start recording'}
-                        className={`p-2 rounded-md border ${recording ? 'bg-red-600 text-white' : 'bg-white text-slate-700'}`}
-                    >
-                        {recording ? 'Stop' : 'Mic'}
-                    </button>
-                    <div className="text-xs text-slate-500">{recording ? 'Recording…' : 'Hold to speak'}</div>
+                    <div>
+                        <Button variant="ghost" onClick={onLogout}>Logout</Button>
+                    </div>
                 </div>
-                <button
-                    onClick={sendMessage}
-                    disabled={sending}
-                    className="px-4 py-2 bg-sky-600 text-white rounded-md disabled:opacity-60"
-                >
-                    {sending ? 'Sending...' : 'Send'}
-                </button>
-            </div>
+
+                <div ref={listRef} className="flex-1 overflow-auto border rounded-md p-4 mb-4 space-y-4 bg-slate-50">
+                    {messages.map((m) => {
+                        const isUser = m.from === 'user'
+                        const content = m.typing ? (m.typedText || '') : (m.text || m.typedText || '')
+                        return (
+                            <div key={m.id} className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                {!isUser && (
+                                    <div className="flex-shrink-0">
+                                        <div className="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-sm font-semibold">AI</div>
+                                    </div>
+                                )}
+                                <div className={`max-w-[80%] ${isUser ? 'ml-auto text-right' : 'mr-auto text-left'}`}>
+                                    <div className={`inline-block p-3 rounded-lg ${isUser ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow'}`}>
+                                        <div className="text-xs font-medium mb-1 opacity-80">{isUser ? 'You' : 'Assistant'}</div>
+                                        <div className="text-sm prose prose-sm dark:prose-invert" dangerouslySetInnerHTML={{ __html: m.typing ? (escapeHtml(content) + '<span class="text-slate-400 ml-1 inline-block animate-pulse">|</span>') : renderMarkdown(content) }} />
+                                    </div>
+                                </div>
+                                {isUser && (
+                                    <div className="flex-shrink-0">
+                                        <div className="w-8 h-8 rounded-full bg-sky-600 text-white flex items-center justify-center text-sm font-semibold">U</div>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
+                </div>
+
+                <div className="sticky bottom-0 bg-transparent py-3">
+                    <div className="flex gap-3 items-end">
+                        <Textarea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Type a message..."
+                        />
+
+                        <div className="flex flex-col items-center gap-2">
+                            <IconButton
+                                onClick={() => (recording ? stopRecording() : startRecording())}
+                                title={recording ? 'Stop recording' : 'Start recording'}
+                                className={
+                                    `${recording ? 'bg-red-600 text-white animate-pulse-record' : 'bg-white text-slate-700 border border-gray-200'}`
+                                }
+                            >
+                                {recording ? 'Stop' : 'Mic'}
+                            </IconButton>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{recording ? 'Recording…' : 'Hold to speak'}</div>
+                        </div>
+                        <Button onClick={sendMessage} disabled={sending}>{sending ? 'Sending...' : 'Send'}</Button>
+                    </div>
+                </div>
+            </Card>
         </div>
     )
 }

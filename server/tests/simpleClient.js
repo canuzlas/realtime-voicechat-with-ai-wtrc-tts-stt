@@ -1,5 +1,5 @@
 const io = require('socket.io-client')
-const s = io('http://127.0.0.1:4000', { transports: ['polling'], upgrade: false })
+const s = io('http://127.0.0.1:3000', { transports: ['polling'], upgrade: false })
 
 s.on('connect', () => { console.log('connected', s.id); s.emit('join', { room: 'test-room' }) })
 s.on('disconnect', (r) => { console.log('disconnected', r) })

@@ -18,6 +18,20 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
+// --- MongoDB / Mongoose connection ---
+const mongoose = require('mongoose')
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || null
+if (MONGODB_URI) {
+    mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true }).then(() => {
+        console.log('Connected to MongoDB')
+    }).catch((err) => {
+        console.error('MongoDB connection error:', err && err.message ? err.message : err)
+    })
+    mongoose.connection.on('error', (err) => console.error('MongoDB error:', err))
+} else {
+    console.warn('MONGODB_URI not set — skipping MongoDB connection')
+}
+
 // Prevent process from crashing on unhandled promise rejections from optional libs
 process.on('unhandledRejection', (reason, promise) => {
     console.warn('unhandledRejection (logged):', reason && reason.message ? reason.message : reason)
@@ -78,7 +92,7 @@ app.get('/health', async (req, res) => {
     res.json(info)
 })
 
-const PORT = process.env.PORT || 4000
+const PORT = process.env.PORT || 3000
 
 // Create an HTTP server and attach socket.io for WebRTC signaling
 const http = require('http')

@@ -1,7 +1,7 @@
 const io = require('socket.io-client')
 const fs = require('fs')
 
-const SERVER = 'http://127.0.0.1:4000'
+const SERVER = 'http://127.0.0.1:3000'
 const AUDIO = __dirname + '/out/tts_output.mp3' // reuse existing file
 
 async function run() {

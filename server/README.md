@@ -45,7 +45,7 @@ Sunucuyu Docker içinde çalıştırmak isterseniz (Dockerfile Node 18 tabanlı 
 
 	# depodan kök dizinde çalıştırın
 	docker build -f server/Dockerfile -t chat-server ./server
-	docker run -p 4000:4000 --env-file ./server/.env chat-server
+	docker run -p 3000:3000 --env-file ./server/.env chat-server
 
 Notlar
 

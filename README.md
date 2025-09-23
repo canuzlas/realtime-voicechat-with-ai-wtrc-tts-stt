@@ -33,3 +33,33 @@ Notlar
 
 - Sunucu klasörü içinde WebRTC peer olmak için native `wrtc` modülü gerekebilir (platforma bağlı derleme/ikili dosya gereksinimleri olabilir). `server/README.md` içinde daha fazla ayrıntı ve Docker talimatları yer almaktadır.
 - Bu proje öğrenme ve prototipleme amaçlıdır; üretime almadan önce kimlik doğrulama, güvenlik ve hata yönetimi kontrolleri ekleyin.
+
+## Running with Docker
+
+If you want to run the backend and MongoDB using Docker Compose, a `docker-compose.yml` is included at the repository root. It builds the server image from `./server/Dockerfile` and starts a MongoDB service.
+
+Start the stack:
+
+```bash
+docker compose up --build
+```
+
+Stop and remove the stack:
+
+```bash
+docker compose down
+```
+
+Remove all containers and images (CAUTION: affects all Docker containers/images on the host):
+
+```bash
+# Stop and remove containers
+docker stop $(docker ps -aq) || true
+docker rm -f $(docker ps -aq) || true
+
+# Remove all images
+docker rmi -f $(docker images -q) || true
+
+# Prune volumes
+docker volume prune -f || true
+```
