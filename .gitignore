@@ -1,11 +1,107 @@
+# =============================================
+# DEPENDENCIES
+# =============================================
 node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# =============================================
+# BUILD OUTPUT
+# =============================================
 dist/
+build/
+.next/
+out/
+
+# =============================================
+# ENVIRONMENT VARIABLES
+# =============================================
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+server/.env.local
+*/*env/*env*
+
+# =============================================
+# SENSITIVE FILES
+# =============================================
 server/keys/*.json
+server/google-credentials.json
+google-credentials.json
+*.pem
+*.key
+*.cert
+
+# =============================================
+# LOGS
+# =============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 server/logs/
+
+# =============================================
+# OS FILES
+# =============================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================
+# IDE FILES
+# =============================================
 .vscode/
 .idea/
-*.log
-server/*.env
-*/*env/*env*
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# =============================================
+# TESTING
+# =============================================
+coverage/
+.nyc_output/
+*.lcov
+
+# =============================================
+# CACHE
+# =============================================
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# =============================================
+# TEMPORARY FILES
+# =============================================
+tmp/
+temp/
+*.tmp
+uploads/
+server/uploads/*
+!server/uploads/.gitkeep
+
+# =============================================
+# MISC
+# =============================================
+.npm
+.yarn
+.pnp
+.pnp.js

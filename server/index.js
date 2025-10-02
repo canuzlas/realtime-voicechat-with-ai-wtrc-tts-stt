@@ -1,118 +1,137 @@
+/**
+ * Main Server Entry Point
+ * Sets up Express app, Socket.IO, and all routes
+ */
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
+const http = require('http')
+const { Server: IOServer } = require('socket.io')
+
+// Config & Database
+const { getConfig } = require('./config/env')
+const { connectDatabase } = require('./config/database')
+
+// Routes
 const authRoutes = require('./routes/auth')
 const chatRoutes = require('./routes/chat')
 
-// Mount tts routes only when Google TTS credentials are available to avoid
-// loading Google libraries at startup when not configured.
-let ttsRoutes = null
-const gcpCredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
-const hasGcpCredFile = gcpCredPath && require('fs').existsSync(gcpCredPath)
-const hasGcpKey = Boolean(process.env.GOOGLE_TTS_KEY || process.env.GOOGLE_TTS_TOKEN)
-if (hasGcpCredFile || hasGcpKey) {
-    ttsRoutes = require('./routes/tts')
-}
+// Middleware
+const { notFound, errorHandler } = require('./middleware/errorHandler')
 
+// Initialize Express app
 const app = express()
-app.use(cors())
-app.use(express.json())
+const config = getConfig()
 
-// --- MongoDB / Mongoose connection ---
-const mongoose = require('mongoose')
-const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || null
-if (MONGODB_URI) {
-    mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true }).then(() => {
-        console.log('Connected to MongoDB')
-    }).catch((err) => {
-        console.error('MongoDB connection error:', err && err.message ? err.message : err)
+// CORS Middleware
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}))
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+
+// Request logging in development
+if (process.env.NODE_ENV === 'development') {
+    app.use((req, res, next) => {
+        console.log(`${req.method} ${req.path}`)
+        next()
     })
-    mongoose.connection.on('error', (err) => console.error('MongoDB error:', err))
-} else {
-    console.warn('MONGODB_URI not set — skipping MongoDB connection')
 }
 
-// Prevent process from crashing on unhandled promise rejections from optional libs
-process.on('unhandledRejection', (reason, promise) => {
-    console.warn('unhandledRejection (logged):', reason && reason.message ? reason.message : reason)
-})
-process.on('uncaughtException', (err) => {
-    console.error('uncaughtException (logged):', err && err.stack ? err.stack : err)
-})
+// Connect to MongoDB
+connectDatabase()
+    .then(() => console.log('✓ MongoDB connected'))
+    .catch(err => console.error('✗ MongoDB connection failed:', err.message))
 
+// API Routes
 app.use('/auth', authRoutes)
 app.use('/chat', chatRoutes)
-if (ttsRoutes) app.use('/chat', ttsRoutes)
 
-// Health endpoint: reports uptime and availability of optional services
-app.get('/health', async (req, res) => {
-    const info = { ok: true, uptime: process.uptime(), services: {} }
-
-    // TTS availability
-    try {
-        const gcpCredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
-        const hasGcpCredFile = gcpCredPath && require('fs').existsSync(gcpCredPath)
-        const hasGcpKey = Boolean(process.env.GOOGLE_TTS_KEY || process.env.GOOGLE_TTS_TOKEN)
-        if (hasGcpCredFile || hasGcpKey) {
-            try {
-                // attempt to require client lazily
-                const TextToSpeechClient = require('@google-cloud/text-to-speech').TextToSpeechClient
-                const ttsClient = new TextToSpeechClient()
-                info.services.tts = { available: true }
-            } catch (e) {
-                info.services.tts = { available: false, error: e && e.message }
-            }
-        } else {
-            info.services.tts = { available: false, reason: 'no-credentials' }
-        }
-    } catch (e) {
-        info.services.tts = { available: false, error: e && e.message }
-    }
-
-    // STT availability
-    try {
-        const gcpCredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
-        const hasGcpCredFile = gcpCredPath && require('fs').existsSync(gcpCredPath)
-        const hasGcpKey = Boolean(process.env.GOOGLE_SPEECH_KEY || process.env.GOOGLE_TTS_KEY)
-        if (hasGcpCredFile || hasGcpKey) {
-            try {
-                const SpeechClient = require('@google-cloud/speech').SpeechClient
-                const sClient = new SpeechClient()
-                info.services.stt = { available: true }
-            } catch (e) {
-                info.services.stt = { available: false, error: e && e.message }
-            }
-        } else {
-            info.services.stt = { available: false, reason: 'no-credentials' }
-        }
-    } catch (e) {
-        info.services.stt = { available: false, error: e && e.message }
-    }
-
-    res.json(info)
+// Root health check
+app.get('/', (req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'Realtime Voice Chat with AI',
+        version: '2.0.0',
+        uptime: process.uptime()
+    })
 })
 
-const PORT = process.env.PORT || 3000
+// Detailed health endpoint
+app.get('/health', async (req, res) => {
+    try {
+        const sttService = require('./services/sttService')
+        const ttsService = require('./services/ttsService')
 
-// Create an HTTP server and attach socket.io for WebRTC signaling
-const http = require('http')
+        res.json({
+            status: 'ok',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            services: {
+                stt: { available: sttService.isAvailable() },
+                tts: { available: ttsService.isAvailable() },
+                gpt: { available: Boolean(config.openaiKey) },
+                database: { connected: require('mongoose').connection.readyState === 1 }
+            }
+        })
+    } catch (err) {
+        res.status(500).json({
+            status: 'error',
+            uptime: process.uptime(),
+            error: err.message
+        })
+    }
+})
+
+// Error handling - must be last
+app.use(notFound)
+app.use(errorHandler)
+
+// Create HTTP server
 const server = http.createServer(app)
-const { Server: IOServer } = require('socket.io')
+
+// Setup Socket.IO for WebRTC signaling
 const io = new IOServer(server, {
     cors: {
-        origin: process.env.SIO_ORIGIN || '*',
-        methods: ['GET', 'POST']
+        origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+        methods: ['GET', 'POST'],
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization']
     }
 })
 
-// Attach signaling handlers (kept in separate module)
+// Attach socket handlers
 try {
-    require('./signaling')(io)
-} catch (e) {
-    // Log but don't crash if signaling cannot be attached (e.g., missing native deps)
-    console.warn('Could not initialize signaling module:', e && e.message ? e.message : e)
+    const setupSocketHandlers = require('./controllers/socketController')
+    setupSocketHandlers(io)
+    console.log('✓ Socket.IO signaling initialized')
+} catch (err) {
+    console.warn('✗ Could not initialize signaling:', err.message)
 }
 
-server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`)
+// Graceful error handling
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason)
 })
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err)
+    process.exit(1)
+})
+
+// Start server
+const PORT = config.port
+server.listen(PORT, () => {
+    console.log(`
+╔════════════════════════════════════════╗
+║  🚀 Server running on port ${PORT}       ║
+║  📡 Socket.IO enabled                  ║
+║  🤖 AI Services configured             ║
+╚════════════════════════════════════════╝
+    `)
+})
+
+module.exports = { app, server, io }

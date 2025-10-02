@@ -1,35 +1,21 @@
 # Dockerfile for the server
-# Uses Node 18 (recommended LTS) on Debian Bullseye and installs common build tools
-# This helps with native modules (wrtc) when prebuilt binaries are not available.
+# Lightweight Node.js 18 Alpine image without WRTC dependencies
 
-FROM node:18-bullseye
+FROM node:18-alpine
 
-# Install build dependencies and common libraries
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-    build-essential \
+# Install minimal build tools for native modules (if needed)
+RUN apk add --no-cache \
     python3 \
-    python3-dev \
-    pkg-config \
-    git \
-    ca-certificates \
-    curl \
-    libnss3 \
-    libasound2-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    make \
+    g++
 
 WORKDIR /usr/src/app
 
 # Copy package manifests first to leverage Docker cache
 COPY package.json package-lock.json* ./
 
-# Install dependencies (production by default; adjust as needed)
-# Ensure node-gyp and node-pre-gyp are available for native module postinstall scripts
-RUN npm install -g node-gyp node-pre-gyp
-RUN npm install --no-audit --no-fund
-
-
+# Install dependencies
+RUN npm ci --only=production --no-audit --no-fund || npm install --only=production --no-audit --no-fund
 
 # Copy application source
 COPY . .
@@ -39,9 +25,10 @@ EXPOSE 3000
 
 ENV NODE_ENV=production
 
-# Start the server
-CMD ["npm", "start"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Command to run the container with environment variables from .env file
-# docker run -p 3000:3000 --env-file ./server/.env chat-server
+# Start the server
+CMD ["node", "index.js"]
 

@@ -12,7 +12,10 @@ export default function createSignaler({ url = (import.meta.env.VITE_API_URL || 
     async function connect() {
         if (!socket) {
             const mod = await import('socket.io-client')
-            socket = mod.io(url)
+            socket = mod.io(url, {
+                withCredentials: true,
+                transports: ['websocket', 'polling']
+            })
             socket.on('connect', () => console.log('signaler connected', socket.id))
             socket.on('offer', (payload) => listeners['offer'] && listeners['offer'](payload))
             socket.on('answer', (payload) => listeners['answer'] && listeners['answer'](payload))

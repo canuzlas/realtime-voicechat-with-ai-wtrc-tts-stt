@@ -611,41 +611,61 @@ export default function ChatPage({ user, onLogout }) {
     }, [])
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-transparent">
-            <Card className="w-11/12 max-w-3xl flex flex-col" style={{ height: '80vh' }}>
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                        <Avatar name={user?.email || 'You'} />
+        <div className="relative min-h-screen overflow-hidden bg-cyber-darker flex items-center justify-center p-4">
+            {/* Animated background */}
+            <div className="fixed inset-0 mesh-gradient-bg opacity-30" />
+            <div className="fixed inset-0 cyber-grid opacity-10" />
+
+            <Card className="relative z-10 w-11/12 max-w-4xl flex flex-col glass-strong border-2 border-white/20 neon-glow-blue rounded-3xl overflow-hidden" style={{ height: '85vh' }}>
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 pb-4 border-b-2 border-white/10 bg-gradient-to-r from-white/5 to-white/10">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-neon-blue via-neon-purple to-neon-pink animate-gradient-xy flex items-center justify-center text-3xl shadow-xl neon-glow-purple">
+                            🤖
+                        </div>
                         <div>
-                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{user?.email || 'You'}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">Online</div>
+                            <div className="text-xl font-bold text-gradient">AI Voice Assistant</div>
+                            <div className="text-sm text-white/70 flex items-center gap-2 mt-1">
+                                <span className="w-2.5 h-2.5 bg-neon-green rounded-full animate-pulse shadow-lg shadow-neon-green/50"></span>
+                                <span className="font-medium">Online & Ready</span>
+                                <span className="text-white/40">•</span>
+                                <span className="text-neon-blue">{user?.username || user?.email || 'Guest'}</span>
+                            </div>
                         </div>
                     </div>
                     <div>
-                        <Button variant="ghost" onClick={onLogout}>Logout</Button>
+                        <button onClick={onLogout} className="px-6 py-2.5 rounded-xl glass-strong border-2 border-white/20 hover:border-neon-pink text-white font-semibold transition-all btn-cyber hover:scale-105 neon-glow-pink">
+                            <span className="flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                                Logout
+                            </span>
+                        </button>
                     </div>
                 </div>
 
-                <div ref={listRef} className="flex-1 overflow-auto border rounded-md p-4 mb-4 space-y-4 bg-slate-50">
+                {/* Messages Area */}
+                <div ref={listRef} className="flex-1 overflow-auto p-6 space-y-4 bg-gradient-to-b from-white/5 to-transparent" style={{ scrollBehavior: 'smooth' }}>
                     {messages.map((m) => {
                         const isUser = m.from === 'user'
                         const content = m.typing ? (m.typedText || '') : (m.text || m.typedText || '')
                         return (
-                            <div key={m.id} className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                            <div key={m.id} className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'} animate-slide-up`}>
                                 {!isUser && (
                                     <div className="flex-shrink-0">
-                                        <div className="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-sm font-semibold">AI</div>
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-purple to-neon-pink flex items-center justify-center text-sm font-bold shadow-lg neon-glow-purple text-white">AI</div>
                                     </div>
                                 )}
-                                <div className={`max-w-[80%] ${isUser ? 'ml-auto text-right' : 'mr-auto text-left'}`}>
-                                    <div className={`inline-block p-3 rounded-lg ${isUser ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow'}`}>
-                                        <div className="text-xs font-medium mb-1 opacity-80">{isUser ? 'You' : 'Assistant'}</div>
-                                        <div className="text-sm prose prose-sm dark:prose-invert" dangerouslySetInnerHTML={{ __html: m.typing ? (escapeHtml(content) + '<span class="text-slate-400 ml-1 inline-block animate-pulse">|</span>') : renderMarkdown(content) }} />
+                                <div className={`max-w-[75%] ${isUser ? 'ml-auto' : 'mr-auto'}`}>
+                                    <div className={`p-4 rounded-2xl ${isUser ? 'bg-gradient-to-br from-neon-blue to-neon-purple text-white shadow-xl neon-glow-blue' : 'glass-strong border border-white/20 text-white shadow-xl'}`}>
+                                        <div className="text-xs font-semibold mb-2 ${isUser ? 'text-white/80' : 'text-neon-blue'}">{isUser ? 'You' : 'AI Assistant'}</div>
+                                        <div className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: m.typing ? (escapeHtml(content) + '<span class="text-white/60 ml-1 inline-block animate-pulse">▋</span>') : renderMarkdown(content) }} />
                                     </div>
                                 </div>
                                 {isUser && (
                                     <div className="flex-shrink-0">
-                                        <div className="w-8 h-8 rounded-full bg-sky-600 text-white flex items-center justify-center text-sm font-semibold">U</div>
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-blue to-cyan-400 flex items-center justify-center text-sm font-bold shadow-lg neon-glow-blue text-white">{user?.username?.[0]?.toUpperCase() || 'U'}</div>
                                     </div>
                                 )}
                             </div>
@@ -653,29 +673,64 @@ export default function ChatPage({ user, onLogout }) {
                     })}
                 </div>
 
-                <div className="sticky bottom-0 bg-transparent py-3">
+                {/* Input Area */}
+                <div className="p-6 pt-4 bg-gradient-to-t from-white/10 to-transparent border-t-2 border-white/10">
                     <div className="flex gap-3 items-end">
-                        <Textarea
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Type a message..."
-                        />
+                        <div className="flex-1">
+                            <textarea
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder="Type your message or use voice..."
+                                rows={3}
+                                className="w-full glass-strong border-2 border-white/20 focus:border-neon-blue rounded-2xl p-4 text-white text-base placeholder-white/50 input-glow resize-none min-h-[100px] max-h-[200px] focus:outline-none focus:ring-2 focus:ring-neon-blue/30"
+                                style={{ fontSize: '16px', lineHeight: '1.5' }}
+                            />
+                        </div>
 
-                        <div className="flex flex-col items-center gap-2">
-                            <IconButton
+                        <div className="flex items-center gap-3">
+                            <button
                                 onClick={() => (recording ? stopRecording() : startRecording())}
                                 title={recording ? 'Stop recording' : 'Start recording'}
-                                className={
-                                    `${recording ? 'bg-red-600 text-white animate-pulse-record' : 'bg-white text-slate-700 border border-gray-200'}`
-                                }
+                                className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold transition-all shadow-xl ${recording
+                                        ? 'bg-gradient-to-br from-red-500 to-red-700 text-white animate-pulse-record neon-glow-pink scale-110'
+                                        : 'glass-strong border-2 border-white/30 text-white hover:border-neon-purple hover:scale-105 neon-glow-purple'
+                                    }`}
                             >
-                                {recording ? 'Stop' : 'Mic'}
-                            </IconButton>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{recording ? 'Recording…' : 'Hold to speak'}</div>
+                                {recording ? (
+                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <rect x="6" y="6" width="12" height="12" rx="2" />
+                                    </svg>
+                                ) : (
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                    </svg>
+                                )}
+                            </button>
+                            <button
+                                onClick={sendMessage}
+                                disabled={sending || !input.trim()}
+                                className="w-14 h-14 rounded-2xl bg-gradient-to-br from-neon-blue via-neon-purple to-neon-pink text-white font-bold flex items-center justify-center shadow-xl neon-glow-blue hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                            >
+                                {sending ? (
+                                    <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                ) : (
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                )}
+                            </button>
                         </div>
-                        <Button onClick={sendMessage} disabled={sending}>{sending ? 'Sending...' : 'Send'}</Button>
                     </div>
+                    {recording && (
+                        <div className="mt-3 flex items-center justify-center gap-2 text-sm text-neon-pink animate-pulse">
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                            <span className="font-medium">Recording... Speak now</span>
+                        </div>
+                    )}
                 </div>
             </Card>
         </div>

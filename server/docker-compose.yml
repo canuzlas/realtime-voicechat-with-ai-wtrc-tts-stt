@@ -1,47 +1,54 @@
-version: '3.8'
-
 services:
+  # MongoDB Database
   db:
     image: mongo:6.0
+    container_name: voicechat-mongodb
     restart: unless-stopped
     environment:
-      # Optional: set a root username/password for MongoDB. If set, update MONGODB_URI accordingly.
-      # MONGO_INITDB_ROOT_USERNAME: root
-      # MONGO_INITDB_ROOT_PASSWORD: example
-      MONGO_INITDB_DATABASE: english_chat
+      MONGO_INITDB_DATABASE: voicechat
+    ports:
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: [ "CMD-SHELL", "(mongosh --eval \"db.adminCommand('ping')\" >/dev/null 2>&1) || (mongo --eval \"db.adminCommand('ping')\" >/dev/null 2>&1) || exit 1" ]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - voicechat-network
 
-  app:
+  # Backend API Server
+  server:
     build:
       context: .
       dockerfile: Dockerfile
-    image: english-chat-bot-server:latest
+    container_name: voicechat-server
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
+    env_file:
+      - .env
     environment:
-      - PORT=3000
-      - MONGODB_URI=mongodb://db:27017/english_chat
-      - NODE_ENV=production
+      - MONGODB_URI=mongodb://db:27017/voicechat
+      - NODE_ENV=${NODE_ENV:-production}
     depends_on:
-      - db
-    # Bind-mounting the entire host ./server into the container hides the
-    # node_modules installed during image build and causes native modules
-    # like `wrtc` to fail at runtime. We keep a bind for source but preserve
-    # the container-installed node_modules by mounting a named volume over
-    # /usr/src/app/node_modules.
-    # For Docker-only runs we use the image contents (includes installed deps).
-    # Avoid bind-mounting the host ./server into the container here because it
-    # hides the node_modules installed at image build time and can cause
-    # native module resolution failures. If you need live-editing, mount
-    # selectively or use a development compose override.
+      db:
+        condition: service_healthy
+    networks:
+      - voicechat-network
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
-  mongo_data: {}
-  node_modules: {}
+  mongo_data:
+    name: voicechat-mongo-data
+
+networks:
+  voicechat-network:
+    name: voicechat-network
+    driver: bridge
